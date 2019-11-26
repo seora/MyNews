@@ -1,11 +1,18 @@
 import nltk
+import requests
 from nltk.stem import WordNetLemmatizer
 from nltk.tag import pos_tag
 from nltk import FreqDist
 from nltk.corpus import stopwords
+from bs4 import BeautifulSoup as bs
 
+import math
+import random
 import json
 import re
+import pandas
+
+import numpy as np
 
 
 # 데이터 전체 구조는 list로 되어있고 각각의 기사는 dictionary 구조로 되어있다.
@@ -17,32 +24,77 @@ import re
 
 
 
-fname = 'News_Category_Dataset.json'
+fname = 'News_list.json'
 
 data = []
-with open(fname) as st_json:
-    for line in st_json:
-        data.append(json.loads(line))
+with open(fname, 'r') as f:
+    data = json.load(f)
 
 
-for i in range(2):
+for i in range(10):
     #print(json.dumps(data[i], indent="\t"))
-    print(i+1, " 번째 기사")
+    index = i
+    category = data[i]['category']
     short_description = data[i]['short_description']
     headline = data[i]['headline']
     short_description = short_description.lower()
     headline = headline.lower()
 
-    #print(short_description)
-    #print(headline)
+
+    #url로 링크 크롤링 하는 부분#
+    url = data[i]['link']
+    # request를 통해 파싱한 html 문서를 beautifulsoup 객체로 데이터 추출
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    req = requests.get(url, headers=headers)
+    soup = bs(req.content, 'html.parser')
+
+    news_data = []
+
+    for link in soup.find_all('p'):
+        news_data.append(link.text.strip())
+    # print(news_data)
+    news_description = ", ".join(news_data)
+
+
+
+    #print(i+1, " 번째 기사")
+    short_description = data[i]['short_description']
+    headline = data[i]['headline']
+    short_description = short_description.lower()
+    headline = headline.lower()
+    news_description = news_description.lower()
+    news_description = news_description.replace(",", "")
+
 
     #remove words less than three letters and remove stopword
     #nltk를 이용하여 토큰화한다 - short_Description, headline
     #nltk - punkt 라이브러리 설치
 
     shortword = re.compile(r'\W*\b\w{1,2}\b')
+
     short_description = shortword.sub('', short_description)
     headline = shortword.sub('', headline)
+
+
+    #특수문 제거
+    short_description = re.sub('[!@#$%^&*",('')/<>?.=]', '', short_description)
+    short_description = short_description.replace("]", "")
+    short_description = short_description.replace("[", "")
+    short_description = short_description.replace("-", "")
+
+    headline = re.sub('[!@#$%^&*,('')"/<>?.=]', '', headline)
+    headline = headline.replace("]", "")
+    headline = headline.replace("[", "")
+    headline = headline.replace("-", "")
+
+    news_description = shortword.sub('', news_description)
+    news_description = re.sub('[!@#$%^&*,('')"/<>?.=]', '', news_description)
+    news_description = news_description.replace("]", "")
+    news_description = news_description.replace("[", "")
+    news_description = news_description.replace("-", "")
+    news_description = news_description.replace("_", "")
+
+
 
     stop = stopwords.words('english')
 
@@ -52,9 +104,13 @@ for i in range(2):
     tokens1 = [word for word in tokens1 if not word in stop]
     tokens2 = [word for word in tokens2 if not word in stop]
 
-    #print(tokens1)
-    #print(tokens2)
-    tokens = tokens1 + tokens2
+    news_token = nltk.wordpunct_tokenize(news_description)
+    news_token = [word for word in news_token if not word in stop]
+
+
+    tokens = tokens1 + tokens2 + news_token
+
+
 
     #동사의 원형복원(lemmatizing)
     #nltk - wordnet 라이브러리 설치
@@ -67,9 +123,6 @@ for i in range(2):
     pnouns_tokens = [t[0] for t in tagged_list if t[1] == "NNP"]
     nouns_tokens = [t[0] for t in tagged_list if t[1] == "NN"]
     verb_tokens = [t[0] for t in tagged_list if t[1] == "VB"]
-    #print("proper nouns : ", pnouns_tokens)
-    #print("nouns : ", nouns_tokens)
-    #print("verb : ", verb_tokens)
 
     #분류된 단어들을 합치기
     token_list = pnouns_tokens + nouns_tokens + verb_tokens
@@ -81,10 +134,18 @@ for i in range(2):
     freq_word = freq_list.most_common(3)
     print("frequency of word : ", freq_word)
 
-    for i in range (3):
-        news_word_tag = freq_word[i][0]
-        print(news_word_tag)
+    news_word_tag = ""
+    for i in range (10):
+        try:
+            for j in range(freq_word[i][1]):
+                news_word_tag += " " + freq_word[i][0]
+        except IndexError:
+            continue
 
+        news_word_tag = news_word_tag.lstrip()
+        dict_corpus = {'index': index, 'category': category, 'news_word_tag': news_word_tag}
+
+    #print(dict_corpus)
 
 
 
