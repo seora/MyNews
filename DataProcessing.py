@@ -1,3 +1,5 @@
+import time
+
 import nltk
 import requests
 from nltk.stem import WordNetLemmatizer
@@ -6,13 +8,8 @@ from nltk import FreqDist
 from nltk.corpus import stopwords
 from bs4 import BeautifulSoup as bs
 
-import math
-import random
 import json
 import re
-import pandas
-
-import numpy as np
 
 
 # 데이터 전체 구조는 list로 되어있고 각각의 기사는 dictionary 구조로 되어있다.
@@ -21,17 +18,18 @@ import numpy as np
 
 # 해야할 것 1. data[i]의 키 중 카테고리로 분류할 수 있게
 #         2. data[i]의 short_description과 headline을 자연어처리해서 특정 단어 추출
+#         3. data[i]의 link로 web crawling하여 기사 추출
 
 
-
-fname = 'News_list.json'
+fname = 'new_list.json'
 
 data = []
 with open(fname, 'r') as f:
     data = json.load(f)
 
+corpus = []
 
-for i in range(10):
+for i in range(len(data)):
     #print(json.dumps(data[i], indent="\t"))
     index = i
     category = data[i]['category']
@@ -39,22 +37,43 @@ for i in range(10):
     headline = data[i]['headline']
     short_description = short_description.lower()
     headline = headline.lower()
+    news_description = ""
 
 
     #url로 링크 크롤링 하는 부분#
     url = data[i]['link']
     # request를 통해 파싱한 html 문서를 beautifulsoup 객체로 데이터 추출
     headers = {'User-Agent': 'Mozilla/5.0'}
-    req = requests.get(url, headers=headers)
-    soup = bs(req.content, 'html.parser')
 
-    news_data = []
+    try:
+        req = requests.get(url, headers = headers)
+        req.timeout=30
+        req.verify = False
+        soup = bs(req.content, 'html.parser')
+        news_data = []
 
-    for link in soup.find_all('p'):
-        news_data.append(link.text.strip())
-    # print(news_data)
-    news_description = ", ".join(news_data)
-
+        for link in soup.find_all('p'):
+            news_data.append(link.text.strip())
+        # print(news_data)
+        news_description = ", ".join(news_data)
+    except requests.ConnectionError as e:
+        print("Connection Error. Make sure you are connected to Internet. Technical Details given below.\n")
+        print(str(e))
+        news_description = ""
+        pass
+    except requests.Timeout as e:
+        print("Timeout Error")
+        print(str(e))
+        news_description = ""
+        pass
+    except requests.RequestException as e:
+        print("General Error")
+        print(str(e))
+        news_description = ""
+        pass
+    except KeyboardInterrupt:
+        print("Someone closed the program")
+        news_description = ""
 
 
     #print(i+1, " 번째 기사")
@@ -77,18 +96,18 @@ for i in range(10):
 
 
     #특수문 제거
-    short_description = re.sub('[!@#$%^&*",('')/<>?.=]', '', short_description)
+    short_description = re.sub('[!@#$%^&“”*",('')/<>?.=]', '', short_description)
     short_description = short_description.replace("]", "")
     short_description = short_description.replace("[", "")
     short_description = short_description.replace("-", "")
 
-    headline = re.sub('[!@#$%^&*,('')"/<>?.=]', '', headline)
+    headline = re.sub('[!@#$%^&*,('')"“”/<>?.=]', '', headline)
     headline = headline.replace("]", "")
     headline = headline.replace("[", "")
     headline = headline.replace("-", "")
 
     news_description = shortword.sub('', news_description)
-    news_description = re.sub('[!@#$%^&*,('')"/<>?.=]', '', news_description)
+    news_description = re.sub('[!@#$%^&*,('')“”"/<>?.=]', '', news_description)
     news_description = news_description.replace("]", "")
     news_description = news_description.replace("[", "")
     news_description = news_description.replace("-", "")
@@ -132,20 +151,23 @@ for i in range(10):
     #사용 빈도가 높은 3가지 단어 추출
     freq_list = FreqDist(token_list)
     freq_word = freq_list.most_common(3)
-    print("frequency of word : ", freq_word)
+    #print("frequency of word : ", freq_word)
 
     news_word_tag = ""
-    for i in range (10):
+    for i in range(3):
         try:
             for j in range(freq_word[i][1]):
                 news_word_tag += " " + freq_word[i][0]
         except IndexError:
             continue
+    news_word_tag = news_word_tag.lstrip()
+    dict_corpus = {'index': index, 'category': category, 'news_word_tag': news_word_tag}
+    corpus.append(dict_corpus)
 
-        news_word_tag = news_word_tag.lstrip()
-        dict_corpus = {'index': index, 'category': category, 'news_word_tag': news_word_tag}
+with open('corpus.json', 'w') as fout:
+    json.dump(corpus, fout, indent="\t")
 
-    #print(dict_corpus)
+
 
 
 
